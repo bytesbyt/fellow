@@ -49,8 +49,8 @@ const Dashboard = () => {
     }
   }
 
-  // Fetch competitors using API
-  const fetchCompetitors = async (): Promise<void> => {
+  // Fetch competitors using API - used after add/delete operations
+  const refreshCompetitors = async (): Promise<void> => {
     try {
       const response = await fetch('/api/competitors')
       
@@ -62,7 +62,7 @@ const Dashboard = () => {
       setCompetitors(competitors || [])
     } catch (error) {
       console.error('Error fetching competitors:', error)
-      setMessage('Unable to load competitors. Please refresh the page.')
+      // Don't show error message for refresh operations to avoid UI noise
     }
   }
 
@@ -71,6 +71,27 @@ const Dashboard = () => {
     e.preventDefault()
     setLoading(true)
     setMessage('')
+
+    // Validate brand name
+    const trimmedBrandName = brandName.trim()
+    if (!trimmedBrandName) {
+      setMessage('Error: Brand name is required')
+      setLoading(false)
+      return
+    }
+    
+    // Additional validation for brand name
+    if (trimmedBrandName.length < 2) {
+      setMessage('Error: Brand name must be at least 2 characters')
+      setLoading(false)
+      return
+    }
+    
+    if (trimmedBrandName.length > 100) {
+      setMessage('Error: Brand name must be less than 100 characters')
+      setLoading(false)
+      return
+    }
 
     // Validate Instagram handle if provided
     let validatedHandle = brandHandle.trim()
@@ -92,7 +113,7 @@ const Dashboard = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          brand_name: brandName,
+          brand_name: trimmedBrandName,
           instagram_handle: validatedHandle || null,
           industry: brandIndustry,
         }),
@@ -154,9 +175,12 @@ const Dashboard = () => {
         throw new Error(error || 'Failed to add competitor')
       }
 
-      setMessage('Competitor added successfully!')
+      // Clear the form first
       setHandle('')
-      fetchCompetitors()
+      
+      // Wait for the list to refresh before showing success message
+      await refreshCompetitors()
+      setMessage('Competitor added successfully!')
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred'
       setMessage('Error: ' + errorMessage)
@@ -181,16 +205,17 @@ const Dashboard = () => {
       if (!response.ok) {
         const { error } = await response.json()
         
-        // If already deleted, just refresh the list
+        // If already deleted, just refresh the list silently
         if (response.status === 404) {
-          fetchCompetitors()
+          await refreshCompetitors()
           return
         }
         
         throw new Error(error || 'Failed to delete competitor')
       }
 
-      fetchCompetitors()
+      // Wait for the list to refresh before showing success message
+      await refreshCompetitors()
       setMessage(`${handle} removed successfully`)
     } catch (error) {
       console.error('Error deleting competitor:', error)
@@ -247,8 +272,43 @@ const Dashboard = () => {
 
   // Fetch competitors when brand is set
   useEffect(() => {
-    if (brand) {
-      fetchCompetitors()
+    let isMounted = true
+    const abortController = new AbortController()
+
+    const loadCompetitors = async () => {
+      if (!brand) return
+
+      try {
+        const response = await fetch('/api/competitors', {
+          signal: abortController.signal
+        })
+        
+        if (!response.ok) {
+          throw new Error('Failed to fetch competitors')
+        }
+
+        const { competitors } = await response.json()
+        
+        // Only update state if still mounted and request wasn't aborted
+        if (isMounted) {
+          setCompetitors(competitors || [])
+        }
+      } catch (error) {
+        // Don't set error message if request was aborted
+        if (error instanceof Error && error.name !== 'AbortError') {
+          console.error('Error fetching competitors:', error)
+          if (isMounted) {
+            setMessage('Unable to load competitors. Please refresh the page.')
+          }
+        }
+      }
+    }
+
+    loadCompetitors()
+
+    return () => {
+      isMounted = false
+      abortController.abort()
     }
   }, [brand])
 

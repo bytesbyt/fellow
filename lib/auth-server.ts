@@ -22,10 +22,21 @@ export const createServerSupabaseClient = async () => {
     supabaseAnonKey,
     {
       cookies: {
-        get(name: string) {
-          return cookieStore.get(name)?.value
+        getAll() {
+          return cookieStore.getAll()
         },
-      },
+        setAll(cookiesToSet) {
+          try {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              cookieStore.set(name, value, options)
+            })
+          } catch {
+            // The `set` method is only available in Server Actions or Route Handlers
+            // If called from a Server Component, we can safely ignore as auth refresh
+            // will be handled by middleware or on the next request
+          }
+        }
+      }
     }
   )
 }

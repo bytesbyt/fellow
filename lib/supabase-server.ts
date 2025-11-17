@@ -26,7 +26,7 @@ export const supabaseAdmin = createClient(
 )
 
 // Helper to verify user owns a brand
-export const verifyBrandOwnership = async (brandId: string, userId: string) => {
+export const verifyBrandOwnership = async (brandId: string, userId: string): Promise<boolean> => {
   const { data, error } = await supabaseAdmin
     .from('brands')
     .select('id')
@@ -34,5 +34,24 @@ export const verifyBrandOwnership = async (brandId: string, userId: string) => {
     .eq('user_id', userId)
     .single()
   
-  return !error && data !== null
+  if (error) {
+    // PGRST116 = no rows found; treat as "not owned"
+    if (error.code === 'PGRST116') {
+      return false
+    }
+    
+    // Log real database errors for debugging
+    console.error('Error verifying brand ownership:', {
+      brandId,
+      userId,
+      error: error.message,
+      code: error.code
+    })
+    
+    // Still return false to fail closed (secure by default)
+    // But now we have visibility into real DB issues
+    return false
+  }
+  
+  return !!data
 }

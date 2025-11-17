@@ -46,10 +46,26 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { brand_name, instagram_handle, industry } = body
 
-    // Validate required fields
-    if (!brand_name || !industry) {
+    // Validate and clean brand name
+    const cleanedBrandName = brand_name?.trim()
+    if (!cleanedBrandName) {
       return NextResponse.json(
-        { error: 'Brand name and industry are required' },
+        { error: 'Brand name is required' },
+        { status: 400 }
+      )
+    }
+
+    if (cleanedBrandName.length < 2 || cleanedBrandName.length > 100) {
+      return NextResponse.json(
+        { error: 'Brand name must be between 2 and 100 characters' },
+        { status: 400 }
+      )
+    }
+
+    // Validate industry
+    if (!industry) {
+      return NextResponse.json(
+        { error: 'Industry is required' },
         { status: 400 }
       )
     }
@@ -73,8 +89,8 @@ export async function POST(request: NextRequest) {
       .from('brands')
       .insert([
         {
-          brand_name,
-          instagram_handle,
+          brand_name: cleanedBrandName,
+          instagram_handle: instagram_handle?.trim() || null,
           industry,
           user_id: user.id
         }
