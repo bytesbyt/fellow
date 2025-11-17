@@ -73,6 +73,12 @@ const Dashboard = () => {
     setLoading(true)
     setMessage('')
 
+    if (!user) {
+      setMessage('You must be logged in to create a brand.')
+      setLoading(false)
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('brands')
@@ -81,7 +87,7 @@ const Dashboard = () => {
             brand_name: brandName,
             instagram_handle: brandHandle,
             industry: brandIndustry,
-            user_id: user?.id || ''
+            user_id: user.id
           }
         ])
         .select()
