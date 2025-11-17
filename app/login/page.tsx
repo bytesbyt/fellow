@@ -20,19 +20,27 @@ export default function LoginPage() {
     try {
       if (isSignUp) {
         // Sign up new user
-        await signUp(email, password)
-        setMessage('✅ Account created! Check your email to verify.')
+        const response = await signUp(email, password)
+        
+        // Check if email confirmation is required
+        if (!response.session) {
+          setMessage('Account created! Check your email to verify.')
+        } else {
+          // User was automatically logged in (no email confirmation required)
+          setMessage('Account created and logged in!')
+          router.push('/dashboard')
+        }
       } else {
         // Log in existing user
         await signIn(email, password)
-        setMessage('✅ Logged in successfully!')
+        setMessage('Logged in successfully!')
         
         // Redirect to dashboard
         router.push('/dashboard')
       }
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred'
-      setMessage('❌ Error: ' + errorMessage)
+      setMessage('Error: ' + errorMessage)
     } finally {
       setLoading(false)
     }

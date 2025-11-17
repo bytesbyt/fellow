@@ -1,11 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { getCurrentUser, signOut } from '@/lib/auth'
 import { User } from '@supabase/supabase-js'
-import type { Brand, Competitor, INDUSTRIES } from '@/app/types'
+import type { Brand, Competitor } from '@/app/types'
 
 const Dashboard = () => {
   // Brand state
@@ -27,75 +26,70 @@ const Dashboard = () => {
   const [user, setUser] = useState<User | null>(null)
   const [checkingAuth, setCheckingAuth] = useState(true)
 
-  // Check for existing brand
+  // Check for existing brand using API
   const checkForBrand = async (): Promise<void> => {
     try {
-      const { data, error } = await supabase
-        .from('brands')
-        .select('*')
-        .limit(1)
-        .single()
-
-      if (error) {
-        console.log('No brand found yet')
-        setBrand(null)
-      } else {
-        setBrand(data)
+      const response = await fetch('/api/brands')
+      
+      if (!response.ok) {
+        if (response.status === 401) {
+          router.push('/login')
+          return
+        }
+        throw new Error('Failed to fetch brand')
       }
+
+      const { brand } = await response.json()
+      setBrand(brand)
     } catch (error) {
-      console.log('No brand exists yet')
+      console.error('Error fetching brand:', error)
     } finally {
       setLoadingBrand(false)
     }
   }
 
-  // Fetch competitors
+  // Fetch competitors using API
   const fetchCompetitors = async (): Promise<void> => {
-    if (!brand) return
-
     try {
-      const { data, error } = await supabase
-        .from('competitors')
-        .select('*')
-        .eq('brand_id', brand.id)
-        .order('added_at', { ascending: false })
+      const response = await fetch('/api/competitors')
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch competitors')
+      }
 
-      if (error) throw error
-      setCompetitors(data || [])
+      const { competitors } = await response.json()
+      setCompetitors(competitors || [])
     } catch (error) {
       console.error('Error fetching competitors:', error)
     }
   }
 
-  // Create brand handler
+  // Create brand handler using API
   const handleCreateBrand = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     setLoading(true)
     setMessage('')
 
-    if (!user) {
-      setMessage('You must be logged in to create a brand.')
-      setLoading(false)
-      return
-    }
-
     try {
-      const { data, error } = await supabase
-        .from('brands')
-        .insert([
-          {
-            brand_name: brandName,
-            instagram_handle: brandHandle,
-            industry: brandIndustry,
-            user_id: user.id
-          }
-        ])
-        .select()
-        .single()
+      const response = await fetch('/api/brands', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          brand_name: brandName,
+          instagram_handle: brandHandle,
+          industry: brandIndustry,
+        }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        const { error } = await response.json()
+        throw new Error(error || 'Failed to create brand')
+      }
 
-      setBrand(data)
+      const { brand } = await response.json()
+      setBrand(brand)
       setMessage('Brand created successfully!')
       
       // Clear form
@@ -109,7 +103,7 @@ const Dashboard = () => {
     }
   }
 
-  // Add competitor handler
+  // Add competitor handler using API
   const handleAddCompetitor = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     if (!brand) return
@@ -118,17 +112,22 @@ const Dashboard = () => {
     setMessage('')
 
     try {
-      const { error } = await supabase
-        .from('competitors')
-        .insert([
-          { 
-            handle: handle,
-            platform: 'instagram',
-            brand_id: brand.id
-          }
-        ])
+      const response = await fetch('/api/competitors', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          handle: handle,
+          platform: 'instagram',
+          brand_id: brand.id,
+        }),
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        const { error } = await response.json()
+        throw new Error(error || 'Failed to add competitor')
+      }
 
       setMessage('Competitor added successfully!')
       setHandle('')
@@ -141,19 +140,22 @@ const Dashboard = () => {
     }
   }
 
-  // Delete competitor handler
+  // Delete competitor handler using API
   const handleDelete = async (competitorId: string, handle: string): Promise<void> => {
     if (!confirm(`Are you sure you want to remove ${handle}?`)) {
       return
     }
 
     try {
-      const { error } = await supabase
-        .from('competitors')
-        .delete()
-        .eq('id', competitorId)
+      const response = await fetch(`/api/competitors/${competitorId}`, {
+        method: 'DELETE',
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        const { error } = await response.json()
+        throw new Error(error || 'Failed to delete competitor')
+      }
+
       fetchCompetitors()
     } catch (error) {
       console.error('Error deleting competitor:', error)
@@ -216,7 +218,7 @@ const Dashboard = () => {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-3xl font-bold mb-2">Welcome to FoodFlow AI! 👋</h1>
+          <h1 className="text-3xl font-bold mb-2">Welcome to FoodFlow AI!</h1>
           <p className="text-gray-600 mb-8">Let&apos;s start by creating your brand profile</p>
           
           <div className="bg-white rounded-lg shadow p-6">
@@ -359,7 +361,11 @@ const Dashboard = () => {
                   <div>
                     <p className="font-medium">{competitor.handle}</p>
                     <p className="text-sm text-gray-500">
-                      Added: {new Date(competitor.added_at).toLocaleDateString()}
+                      Added: {new Date(competitor.added_at).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
                     </p>
                   </div>
                   
