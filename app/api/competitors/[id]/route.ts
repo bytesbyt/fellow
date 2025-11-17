@@ -5,7 +5,7 @@ import { getServerUser } from '@/lib/auth-server'
 // DELETE /api/competitors/[id] - Delete a competitor
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     // Get authenticated user
@@ -14,20 +14,25 @@ export async function DELETE(
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const competitorId = params.id
+    const { id: competitorId } = await params
 
     // First verify the competitor belongs to user's brand
-    const { data: competitor } = await supabaseAdmin
+    const { data: competitor, error: fetchError } = await supabaseAdmin
       .from('competitors')
       .select('brand_id')
       .eq('id', competitorId)
       .single()
 
-    if (!competitor) {
-      return NextResponse.json(
-        { error: 'Competitor not found' },
-        { status: 404 }
-      )
+    // Check if competitor exists (PGRST116 = no rows returned)
+    if (fetchError || !competitor) {
+      if (fetchError?.code === 'PGRST116' || !competitor) {
+        return NextResponse.json(
+          { error: 'Competitor not found or already deleted' },
+          { status: 404 }
+        )
+      }
+      // Other database errors
+      throw fetchError
     }
 
     // Verify user owns the brand

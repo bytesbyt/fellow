@@ -180,6 +180,13 @@ const Dashboard = () => {
 
       if (!response.ok) {
         const { error } = await response.json()
+        
+        // If already deleted, just refresh the list
+        if (response.status === 404) {
+          fetchCompetitors()
+          return
+        }
+        
         throw new Error(error || 'Failed to delete competitor')
       }
 
