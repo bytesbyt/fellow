@@ -48,6 +48,12 @@ export async function signOut() {
 export async function getCurrentUser() {
   const { data: { user }, error } = await supabase.auth.getUser()
   
+  // Auth session missing is expected when not logged in
+  if (error && error.message === 'Auth session missing!') {
+    return null
+  }
+  
+  // Other errors should still be thrown
   if (error) {
     throw new Error(`getCurrentUser failed: ${error.message}`)
   }
