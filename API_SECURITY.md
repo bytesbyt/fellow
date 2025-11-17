@@ -4,7 +4,7 @@ This application uses **API Routes** instead of direct database access for enhan
 
 ## Architecture Overview
 
-```
+```text
 Client (Browser) → API Routes → Supabase (with Service Role Key)
 ```
 

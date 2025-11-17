@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { getCurrentUser, signOut } from '@/lib/auth'
 import { User } from '@supabase/supabase-js'
 import type { Brand, Competitor } from '@/app/types'
+import { formatDate, formatInstagramHandle, validateInstagramHandle } from '@/lib/utils'
 
 const Dashboard = () => {
   // Brand state
@@ -61,6 +62,7 @@ const Dashboard = () => {
       setCompetitors(competitors || [])
     } catch (error) {
       console.error('Error fetching competitors:', error)
+      setMessage('Unable to load competitors. Please refresh the page.')
     }
   }
 
@@ -70,6 +72,19 @@ const Dashboard = () => {
     setLoading(true)
     setMessage('')
 
+    // Validate Instagram handle if provided
+    let validatedHandle = brandHandle.trim()
+    if (validatedHandle) {
+      validatedHandle = formatInstagramHandle(validatedHandle)
+      
+      // Validate format
+      if (!validateInstagramHandle(validatedHandle)) {
+        setMessage('Error: Invalid Instagram handle format')
+        setLoading(false)
+        return
+      }
+    }
+
     try {
       const response = await fetch('/api/brands', {
         method: 'POST',
@@ -78,7 +93,7 @@ const Dashboard = () => {
         },
         body: JSON.stringify({
           brand_name: brandName,
-          instagram_handle: brandHandle,
+          instagram_handle: validatedHandle || null,
           industry: brandIndustry,
         }),
       })
@@ -111,6 +126,16 @@ const Dashboard = () => {
     setLoading(true)
     setMessage('')
 
+    // Validate and normalize handle
+    const normalizedHandle = formatInstagramHandle(handle)
+    
+    // Validate Instagram handle format
+    if (!validateInstagramHandle(normalizedHandle)) {
+      setMessage('Error: Invalid Instagram handle. Use only letters, numbers, periods, and underscores (max 30 chars)')
+      setLoading(false)
+      return
+    }
+
     try {
       const response = await fetch('/api/competitors', {
         method: 'POST',
@@ -118,7 +143,7 @@ const Dashboard = () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          handle: handle,
+          handle: normalizedHandle,
           platform: 'instagram',
           brand_id: brand.id,
         }),
@@ -146,6 +171,8 @@ const Dashboard = () => {
       return
     }
 
+    setMessage('')
+
     try {
       const response = await fetch(`/api/competitors/${competitorId}`, {
         method: 'DELETE',
@@ -157,9 +184,11 @@ const Dashboard = () => {
       }
 
       fetchCompetitors()
+      setMessage(`${handle} removed successfully`)
     } catch (error) {
       console.error('Error deleting competitor:', error)
-      alert('Failed to delete competitor')
+      const errorMessage = error instanceof Error ? error.message : 'Failed to delete competitor'
+      setMessage('Error: ' + errorMessage)
     }
   }
 
@@ -175,9 +204,13 @@ const Dashboard = () => {
 
   // Check authentication on mount
   useEffect(() => {
+    let isMounted = true
+
     const checkAuth = async (): Promise<void> => {
       try {
         const currentUser = await getCurrentUser()
+        
+        if (!isMounted) return
         
         if (!currentUser) {
           router.push('/login')
@@ -188,13 +221,21 @@ const Dashboard = () => {
         await checkForBrand()
       } catch (error) {
         console.error('Auth error:', error)
-        router.push('/login')
+        if (isMounted) {
+          router.push('/login')
+        }
       } finally {
-        setCheckingAuth(false)
+        if (isMounted) {
+          setCheckingAuth(false)
+        }
       }
     }
     
     checkAuth()
+
+    return () => {
+      isMounted = false
+    }
   }, [router])
 
   // Fetch competitors when brand is set
@@ -361,11 +402,7 @@ const Dashboard = () => {
                   <div>
                     <p className="font-medium">{competitor.handle}</p>
                     <p className="text-sm text-gray-500">
-                      Added: {new Date(competitor.added_at).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                      })}
+                      Added: {formatDate(competitor.added_at)}
                     </p>
                   </div>
                   

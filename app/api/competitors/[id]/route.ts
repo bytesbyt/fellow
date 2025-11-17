@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabaseAdmin } from '@/lib/supabase-server'
+import { supabaseAdmin, verifyBrandOwnership } from '@/lib/supabase-server'
 import { getServerUser } from '@/lib/auth-server'
 
 // DELETE /api/competitors/[id] - Delete a competitor
@@ -31,14 +31,9 @@ export async function DELETE(
     }
 
     // Verify user owns the brand
-    const { data: brand } = await supabaseAdmin
-      .from('brands')
-      .select('id')
-      .eq('id', competitor.brand_id)
-      .eq('user_id', user.id)
-      .single()
-
-    if (!brand) {
+    const ownsIt = await verifyBrandOwnership(competitor.brand_id, user.id)
+    
+    if (!ownsIt) {
       return NextResponse.json(
         { error: 'You do not have permission to delete this competitor' },
         { status: 403 }

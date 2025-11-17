@@ -13,11 +13,25 @@ export async function GET() {
     }
 
     // First get user's brand
-    const { data: brand } = await supabaseAdmin
+    const { data: brand, error: brandError } = await supabaseAdmin
       .from('brands')
       .select('id')
       .eq('user_id', user.id)
       .single()
+
+    if (brandError) {
+      // Check if it's a "not found" error (PGRST116) vs actual error
+      if (brandError.code === 'PGRST116') {
+        // User has no brand yet - return empty array
+        return NextResponse.json({ competitors: [] })
+      }
+      // Actual error - log and return 500
+      console.error('Error fetching brand:', brandError)
+      return NextResponse.json(
+        { error: 'Failed to fetch brand' },
+        { status: 500 }
+      )
+    }
 
     if (!brand) {
       return NextResponse.json({ competitors: [] })
