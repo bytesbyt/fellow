@@ -1,0 +1,58 @@
+import 'server-only'
+import { createClient } from '@supabase/supabase-js'
+
+// Validate required environment variables at startup
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error(
+    'Missing required environment variables: ' +
+    (!supabaseUrl ? 'NEXT_PUBLIC_SUPABASE_URL ' : '') +
+    (!serviceRoleKey ? 'SUPABASE_SERVICE_ROLE_KEY' : '')
+  )
+}
+
+// Server-side Supabase client with service role key
+// This bypasses RLS and should ONLY be used in server-side code
+export const supabaseAdmin = createClient(
+  supabaseUrl,
+  serviceRoleKey,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
+)
+
+// Helper to verify user owns a brand
+export const verifyBrandOwnership = async (brandId: string, userId: string): Promise<boolean> => {
+  const { data, error } = await supabaseAdmin
+    .from('brands')
+    .select('id')
+    .eq('id', brandId)
+    .eq('user_id', userId)
+    .single()
+  
+  if (error) {
+    // PGRST116 = no rows found; treat as "not owned"
+    if (error.code === 'PGRST116') {
+      return false
+    }
+    
+    // Log real database errors for debugging
+    console.error('Error verifying brand ownership:', {
+      brandId,
+      userId,
+      error: error.message,
+      code: error.code
+    })
+    
+    // Still return false to fail closed (secure by default)
+    // But now we have visibility into real DB issues
+    return false
+  }
+  
+  return !!data
+}
